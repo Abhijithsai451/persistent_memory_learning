@@ -1,8 +1,8 @@
 [
   {
-    "category": "ongoing project",
-    "content": "User is building an ongoing AI memory research project.",
+    "category": "preference",
+    "content": "User prefers Python.",
     "importance": 0.8,
-    "created_at": "2026-09-22T12:19:44.166196"
+    "created_at": "2026-09-22T12:25:45.684023"
   }
 ]
