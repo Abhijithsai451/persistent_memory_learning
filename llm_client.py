@@ -300,23 +300,11 @@ class LLMClient:
             input=update_prompt
         )
 
-        update_decision = json.loads(
-            response.output_text
-        )
+        update_decision = json.loads(response.output_text)
 
-        return {
-            **memory_decision,
-            **update_decision
-        }
+        return { **memory_decision,**update_decision}
 
-    # -------------------------
-    # Consolidation
-    # -------------------------
-
-    def consolidate_memories(
-        self,
-        memories_text
-    ):
+    def consolidate_memories(self,memories_text):
 
         prompt = f"""
                 You are a memory consolidation system.
@@ -358,26 +346,10 @@ class LLMClient:
             input=prompt
         )
 
-        result = json.loads(
-            response.output_text
-        )
+        result = json.loads(response.output_text)
+        return result.get("memories",[])
 
-        return result.get(
-            "memories",
-            []
-        )
-
-    # -------------------------
-    # Benchmark evaluation
-    # -------------------------
-
-    def evaluate_answer(
-        self,
-        question,
-        expected,
-        actual
-    ):
-
+    def evaluate_answer(self,question,expected,actual):
         prompt = f"""
                 Evaluate whether the assistant's answer
                 correctly answers the question.
@@ -416,8 +388,6 @@ class LLMClient:
             input=prompt
         )
 
-        result = json.loads(
-            response.output_text
-        )
+        result = json.loads(response.output_text)
 
         return result["correct"]

@@ -9,170 +9,206 @@ class MemoryManager:
         self.memory_file = memory_file
         self.data = self.load_memory()
 
-        def load_memory(self):
-            if not os.path.exists(self.memory_file):
-                return []
+    def load_memory(self):
+        if not os.path.exists(self.memory_file):
+            return []
 
+        try:
             with open(self.memory_file, "r", encoding="utf-8") as f:
                 return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return []
 
-        def save_to_file(self):
-            with open(self.memory_file, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2)
+    def save_to_file(self):
+        with open(self.memory_file, "w", encoding="utf-8") as f:
+            json.dump(self.data, f, indent=2)
 
-        def reset(self):
-            self.data = []
-            self.save_to_file()
+    def reset(self):
+        self.data = []
+        self.save_to_file()
 
-        def get_memories(self):
-            return self.data.copy()
+    def get_memories(self):
+        return self.data.copy()
 
-        def get_memory_count(self):
-            return len(self.data)
+    def get_memory_count(self):
+        return len(self.data)
 
-        def add_memory(self, category, content, importance=0.5):
+    def add_memory(
+        self,
+        category,
+        content,
+        importance=0.5
+    ):
+        self.data.append({
+            "category": category,
+            "content": content,
+            "importance": importance,
+            "created_at": datetime.now().isoformat()
+        })
 
-            self.data.append({
-                "category": category,
-                "content": content,
-                "importance": importance,
-                "created_at": datetime.now().isoformat()
-            })
+        self.save_to_file()
 
-            self.save_to_file()
+        print("Memory added successfully.")
 
-            print("Memory added successfully.")
 
-        def update_memory(
-                self,
-                index,
-                category,
-                content,
-                importance=0.5
+    def update_memory(
+        self,
+        index,
+        category,
+        content,
+        importance=0.5
+    ):
+        if index < 0 or index >= len(self.data):
+            print("Invalid memory index.")
+            return
+
+        self.data[index] = {
+            "category": category,
+            "content": content,
+            "importance": importance,
+            "updated_at": datetime.now().isoformat()
+        }
+
+        self.save_to_file()
+
+        print("Memory updated successfully.")
+
+    def search_memory(
+        self,
+        query,
+        limit=5
+    ):
+        if not self.data:
+            return []
+
+        query_words = set(
+            query.lower().split()
+        )
+
+        scored_memories = []
+
+        for memory in self.data:
+
+            content_words = set(
+                memory["content"].lower().split()
+            )
+
+            overlap = len(
+                query_words.intersection(
+                    content_words
+                )
+            )
+
+            if overlap > 0:
+
+                importance = memory.get(
+                    "importance",
+                    0.5
+                )
+
+                score = overlap + importance
+
+                scored_memories.append(
+                    (score, memory)
+                )
+
+        scored_memories.sort(
+            key=lambda item: item[0],
+            reverse=True
+        )
+
+        return [
+            memory
+            for _, memory in scored_memories[:limit]
+        ]
+
+    def save_memory(self, decision):
+
+        if not decision.get(
+            "should_remember",
+            False
         ):
+            print("Memory not saved.")
+            return
 
-            self.data[index] = {
-                "category": category,
-                "content": content,
-                "importance": importance,
-                "updated_at": datetime.now().isoformat()
-            }
+        action = decision.get(
+            "action",
+            "ignore"
+        )
 
-            self.save_to_file()
+        importance = decision.get(
+            "importance",
+            0.5
+        )
 
-            print("Memory updated successfully.")
+        if action == "add":
 
-        def search_memory(self, query, limit=5):
-
-            if not self.data:
-                return []
-
-            query_words = set(
-                query.lower().split()
+            self.add_memory(
+                category=decision["category"],
+                content=decision["memory"],
+                importance=importance
             )
 
-            scored = []
+        elif action == "update":
 
-            for memory in self.data:
-
-                content_words = set(
-                    memory["content"].lower().split()
-                )
-
-                overlap = len(
-                    query_words.intersection(content_words)
-                )
-
-                if overlap > 0:
-                    importance = memory.get(
-                        "importance",
-                        0.5
-                    )
-
-                    score = overlap + importance
-
-                    scored.append(
-                        (score, memory)
-                    )
-
-            scored.sort(
-                key=lambda item: item[0],
-                reverse=True
+            self.update_memory(
+                index=decision["memory_index"],
+                category=decision["category"],
+                content=decision["memory"],
+                importance=importance
             )
 
-            return [
-                memory
-                for _, memory in scored[:limit]
-            ]
+        elif action == "refine":
 
-        def save_memory(self, decision):
-
-            if not decision["should_remember"]:
-                print("Memory not saved.")
-                return
-
-            action = decision["action"]
-
-            importance = decision.get(
-                "importance",
-                0.5
+            self.update_memory(
+                index=decision["memory_index"],
+                category=decision["category"],
+                content=decision["memory"],
+                importance=importance
             )
 
-            if action == "add":
+        elif action == "ignore":
 
-                self.add_memory(
-                    decision["category"],
-                    decision["memory"],
-                    importance
-                )
+            print("Memory ignored.")
 
-            elif action == "update":
+    # -------------------------
+    # Consolidation
+    # -------------------------
 
-                self.update_memory(
-                    decision["memory_index"],
-                    decision["category"],
-                    decision["memory"],
-                    importance
-                )
+    def should_consolidate(
+        self,
+        threshold=5
+    ):
+        return len(self.data) >= threshold
 
-            elif action == "refine":
+    def consolidate(self, llm):
 
-                self.update_memory(
-                    decision["memory_index"],
-                    decision["category"],
-                    decision["memory"],
-                    importance
-                )
+        if len(self.data) < 2:
+            return
 
-            elif action == "ignore":
-
-                print("Memory ignored.")
-
-        def should_consolidate(self, threshold=5):
-            return len(self.data) >= threshold
-
-        def consolidate(self, llm):
-
-            if len(self.data) < 2:
-                return
-
-            memories_text = "\n".join(
-                f"{i}: "
-                f"[{memory['category']}] "
-                f"(importance={memory.get('importance', 0.5)}) "
-                f"{memory['content']}"
-                for i, memory in enumerate(self.data)
+        memories_text = "\n".join(
+            f"{i}: "
+            f"[{memory['category']}] "
+            f"(importance={memory.get('importance', 0.5)}) "
+            f"{memory['content']}"
+            for i, memory in enumerate(
+                self.data
             )
+        )
 
-            consolidated = llm.consolidate_memories(
+        consolidated = (
+            llm.consolidate_memories(
                 memories_text
             )
+        )
 
-            if not consolidated:
-                return
+        if not consolidated:
+            return
 
-            self.data = consolidated
+        self.data = consolidated
 
-            self.save_to_file()
+        self.save_to_file()
 
-            print("Memory consolidation completed.")
+        print(
+            "Memory consolidation completed."
+        )

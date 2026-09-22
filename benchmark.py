@@ -1,9 +1,7 @@
 import os
 import json
 
-from llm_client import LLMClient
-from memory import MemoryManager
-
+from memory_agent import StatelessAgent, NaiveMemoryAgent, MemoryAgent, ConsolidatedMemoryAgent
 
 # =========================================================
 # TEST DATA
@@ -101,194 +99,41 @@ TEST_CASES = [
     },
 ]
 
-
-class StatelessAgent:
-
-    def __init__(self):
-
-        self.llm = LLMClient(
-            api_key=os.getenv(
-                "OPENAI_API_KEY"
-            )
-        )
-
-    def __call__(self, message):
-
-        result = self.llm.get_response(
-            user_message=message,
-            memory_manager=None
-        )
-
-        return result["answer"]
-
-
-class NaiveMemoryAgent:
-
-    def __init__(self):
-
-        self.llm = LLMClient(
-            api_key=os.getenv(
-                "OPENAI_API_KEY"
-            )
-        )
-
-        self.memory_manager = MemoryManager(
-            memory_file=
-            "naive_benchmark_memory.json"
-        )
-
-    def __call__(self, message):
-
-        result = self.llm.get_response(
-            user_message=message,
-            memory_manager=self.memory_manager
-        )
-
-        self.memory_manager.add_memory(
-            category="conversation",
-            content=message,
-            importance=0.5
-        )
-
-        return result["answer"]
-
-
-class MemoryAgent:
-
-    def __init__(self):
-
-        self.llm = LLMClient(
-            api_key=os.getenv(
-                "OPENAI_API_KEY"
-            )
-        )
-
-        self.memory_manager = MemoryManager(
-            memory_file=
-            "intelligent_benchmark_memory.json"
-        )
-
-    def __call__(self, message):
-
-        result = self.llm.get_response(
-            user_message=message,
-            memory_manager=self.memory_manager
-        )
-
-        decision = self.llm.classify_memory(
-            user_message=message,
-            existing_memories=
-                self.memory_manager.data
-        )
-
-        self.memory_manager.save_memory(
-            decision
-        )
-
-        return result["answer"]
-
-
-class ConsolidatedMemoryAgent(
-    MemoryAgent
-):
-
-    def __call__(self, message):
-
-        result = self.llm.get_response(
-            user_message=message,
-            memory_manager=self.memory_manager
-        )
-
-        decision = self.llm.classify_memory(
-            user_message=message,
-            existing_memories=
-                self.memory_manager.data
-        )
-
-        self.memory_manager.save_memory(
-            decision
-        )
-
-        if self.memory_manager.should_consolidate(
-            threshold=5
-        ):
-            self.memory_manager.consolidate(
-                self.llm
-            )
-
-        return result["answer"]
-
 def run_test_case(agent, test_case):
+    print(f"\n--- {test_case['name']} ---")
 
-    print(
-        f"\n--- {test_case['name']} ---"
-    )
-
-    if hasattr(
-        agent,
-        "memory_manager"
-    ):
+    if hasattr(agent,"memory_manager"):
 
         agent.memory_manager.reset()
-
-    for message in test_case[
-        "conversation"
-    ]:
-
+    for message in test_case["conversation"]:
         agent(message)
-
     answer = agent(
         test_case["question"]
     )
-
     passed = agent.llm.evaluate_answer(
         test_case["question"],
         test_case["expected"],
         answer
     )
+    if hasattr( agent,"memory_manager" ):
 
-    if hasattr(
-        agent,
-        "memory_manager"
-    ):
-
-        memory_count = (
-            agent.memory_manager
-            .get_memory_count()
-        )
-
+        memory_count = ( agent.memory_manager.get_memory_count() )
     else:
-
         memory_count = 0
-
     print(
         f"Question: "
         f"{test_case['question']}"
     )
 
-    print(
-        f"Expected: "
-        f"{test_case['expected']}"
-    )
+    print(f"Expected: "f"{test_case['expected']}" )
 
-    print(
-        f"Actual: {answer}"
-    )
+    print(f"Actual: {answer}" )
 
-    print(
-        f"Memory count: "
-        f"{memory_count}"
-    )
+    print( f"Memory count: "f"{memory_count}" )
 
-    print(
-        f"Result: "
-        f"{'PASS' if passed else 'FAIL'}"
-    )
+    print(f"Result: " f"{'PASS' if passed else 'FAIL'}")
 
-    return {
-        "passed": passed,
-        "memory_count": memory_count
-    }
+    return {"passed": passed, "memory_count": memory_count }
 
 def run_agent(agent_class, name):
 
@@ -303,49 +148,24 @@ def run_agent(agent_class, name):
 
     for test_case in TEST_CASES:
 
-        result = run_test_case(
-            agent,
-            test_case
-        )
-
+        result = run_test_case(agent, test_case )
         results.append(result)
 
-    passed = sum(
-        result["passed"]
-        for result in results
-    )
-
+    passed = sum(result["passed"] for result in results )
     total = len(results)
+    memories = sum( result["memory_count"] for result in results )
 
-    memories = sum(
-        result["memory_count"]
-        for result in results
-    )
-
-    accuracy = (
-        passed / total
-        if total
-        else 0
-    )
+    accuracy = ( passed / total if total else 0 )
 
     print("\n--- Summary ---")
 
-    print(
-        f"Agent: {name}"
-    )
+    print( f"Agent: {name}" )
 
-    print(
-        f"Passed: {passed}/{total}"
-    )
+    print( f"Passed: {passed}/{total}" )
 
-    print(
-        f"Accuracy: {accuracy:.2%}"
-    )
+    print(f"Accuracy: {accuracy:.2%}"  )
 
-    print(
-        f"Total memories stored: "
-        f"{memories}"
-    )
+    print( f"Total memories stored: {memories}" )
 
     return {
         "agent": name,
@@ -358,64 +178,34 @@ def run_agent(agent_class, name):
 if __name__ == "__main__":
 
     agents = [
-        (
-            StatelessAgent,
-            "No Memory"
-        ),
-
-        (
-            NaiveMemoryAgent,
-            "Naive Memory"
-        ),
-
-        (
-            MemoryAgent,
-            "Intelligent Memory"
-        ),
-
-        (
-            ConsolidatedMemoryAgent,
-            "Consolidated Memory"
-        ),
+                (StatelessAgent,"No Memory"),
+                (NaiveMemoryAgent,"Naive Memory" ),
+                (MemoryAgent,"Intelligent Memory"),
+                (ConsolidatedMemoryAgent,"Consolidated Memory"),
     ]
 
     all_results = []
 
     for agent_class, name in agents:
-
         result = run_agent(
             agent_class,
             name
         )
-
         all_results.append(result)
-
     print("\n")
     print("=" * 60)
     print("FINAL EXPERIMENT RESULTS")
     print("=" * 60)
 
     for result in all_results:
-
         print(
             f"{result['agent']}: "
             f"{result['accuracy']:.2%} accuracy | "
             f"{result['total_memories']} memories"
         )
 
-    with open(
-        "benchmark_results.json",
-        "w",
-        encoding="utf-8"
-    ) as f:
+    with open("benchmark_results.json", "w",encoding="utf-8") as f:
 
-        json.dump(
-            all_results,
-            f,
-            indent=2
-        )
+        json.dump(all_results,f, indent=2 )
 
-    print(
-        "\nResults saved to "
-        "benchmark_results.json"
-    )
+    print("\nResults saved to benchmark_results.json" )
